@@ -1,26 +1,30 @@
 import mysql.connector
+import pyodbc
+
+server = 'tcp:test2273.database.windows.net,1433'
+database = 'GPA'
+username = 'BrenoFlag'
+password = 'Macacocemrab0!'
+# ENCRYPT defaults to yes starting in ODBC Driver 18. It's good to always specify ENCRYPT=yes on the client side to avoid MITM attacks.
+cnx = pyodbc.connect(
+    'DRIVER={ODBC Driver 18 for SQL Server};SERVER=' + server + ';DATABASE=' + database + ';UID=' + username + ';PWD=' + password + ';Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30')
+cursor = cnx.cursor()
+
+
+def connectionString():
+    # ENCRYPT defaults to yes starting in ODBC Driver 18. It's good to always specify ENCRYPT=yes on the client side to avoid MITM attacks.
+    return 'DRIVER={ODBC Driver 18 for SQL Server};SERVER=' + server + ';DATABASE=' + database + ';UID=' + username + ';PWD=' + password + ';Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30'
 
 
 def getTable(tableName):
     """ Reads table as a 2 dimensional array. """
-    connection = mysql.connector.connect(host='localhost',
-                                         database='GPAcalculator',
-                                         user='root',
-                                         password='Macacocemrab0!')
-
-    cursor = connection.cursor()
     cursor.execute(f"SELECT * FROM {tableName}")
     return cursor.fetchall()
 
 
 def createQuery(query):
     # Check if appendToDatabase function can do it all without issues. If so, delete this method.
-    connection = mysql.connector.connect(host='localhost',
-                                         database='GPAcalculator',
-                                         user='root',
-                                         password='Macacocemrab0!')
     try:
-        cursor = connection.cursor()
         cursor.execute(query)
         print(cursor.rowcount, "Row impacted.")
         cursor.close()
@@ -29,20 +33,25 @@ def createQuery(query):
         print("Failed to insert record into Laptop table {}".format(error))
 
 
+def rowCount(tableName):
+    # counts the number of rows in a database
+    cursor.execute(f"SELECT * FROM {tableName}")
+    rows = cursor.fetchall()
+    return len(rows)
+
+
 class GPACalculatorDatabase:
     connection = None
+    cursor = None
 
     def __init__(self):
+        self.connection = pyodbc.connect(connectionString())
+        self.cursor = self.connection.cursor()
 
-        self.connection = mysql.connector.connect(host='localhost',
-                                                  database='GPAcalculator',
-                                                  user='root',
-                                                  password='Macacocemrab0!')
-
-    def getClassTable(self, accountID):
+    @staticmethod
+    def getClassTable(accountID):
         """ Reads table as a 2 dimensional array. """
-        cursor = self.connection.cursor()
-        cursor.execute(f"SELECT * FROM classeswithaccounts where accountID = {accountID}")
+        cursor.execute(f"SELECT * FROM classes where accountID = {accountID}")
         return cursor.fetchall()
 
     def selectClassFromMenu(self, accountID):
@@ -56,25 +65,16 @@ class GPACalculatorDatabase:
 
         classID = ((self.classesCount(accountID)) + 1)
         try:
-            cursor = self.connection.cursor()
-            cursor.execute("INSERT INTO classeswithaccounts (accountID, classID, className, classGrade, classCredit) "
+            self.cursor.execute("INSERT INTO classes (accountID, classID, className, classGrade, classCredit) "
                            f"VALUES ({accountID}, {classID}, '{className}', {classGrade}, {classCredit}) ")
             self.connection.commit()
-            print(cursor.rowcount, "modification completed successfully")
-            cursor.close()
+            print(self.cursor.rowcount, "modification completed successfully")
 
         except mysql.connector.Error as error:
             print("Failed to perform action".format(error))
 
     def classesCount(self, accountID):
         return len(self.getClassTable(accountID))
-
-    def rowCount(self, tableName):
-        # counts the number of rows in a database
-        cursor = self.connection.cursor()
-        cursor.execute(f"SELECT * FROM {tableName}")
-        rows = cursor.fetchall()
-        return len(rows)
 
     def changeClass(self, accountID):
         """Struggling to format query correctly. Works fine when ran at sql console,
@@ -116,47 +116,44 @@ class GPACalculatorDatabase:
                         else:
                             "invalid choice"
 
-                    cursor = self.connection.cursor()
-                    query = "UPDATE classeswithaccounts " \
+                    self.cursor = self.connection.cursor()
+                    query = "UPDATE classes " \
                             f"SET {columName} = '{newValue}' WHERE classID = {classNumber} and accountID = {accountID}"
-                    cursor.execute(query)
+                    self.cursor.execute(query)
                     self.connection.commit()
 
     def selectClassForDetails(self, accountID, ID):
-        determiner = False
         for elements in self.getClassTable(accountID):
             if elements[1] == ID:
                 print(f"1) Name: {elements[2]}\n"
                       f"2) Grade: {elements[3]}\n"
                       f"3) Credit: {elements[4]}\n")
-                determiner = True
                 return int(input("What would you like to change? ('0' to return to menu) "))
 
 
 class LogIn:
     connection = None
+    cursor = None
 
     def __init__(self):
-        self.connection = mysql.connector.connect(host='localhost',
-                                                  database='GPAcalculator',
-                                                  user='root',
-                                                  password='Macacocemrab0!')
+        self.connection = pyodbc.connect(connectionString())
+        self.cursor = self.connection.cursor()
 
     def appendUser(self, Username, Password):
         try:
-            cursor = self.connection.cursor()
-            cursor.execute("INSERT INTO accountslogin (accountUserName, accountPassword) "
-                           f"VALUES ('{Username}', '{Password}') ")
+            self.cursor = self.connection.cursor()
+            self.cursor.execute("INSERT INTO accounts (username, password) "
+                                f"VALUES ('{Username}', '{Password}') ")
             self.connection.commit()
-            print(cursor.rowcount, "modification completed successfully")
-            cursor.close()
+            print(self.cursor.rowcount, "modification completed successfully")
 
         except mysql.connector.Error as error:
             print("Failed to perform action".format(error))
 
-    def getUsersTable(self):
+    @staticmethod
+    def getUsersTable():
         """ Reads table as a 2 dimensional array. """
-        return getTable("accountslogin")
+        return getTable("accounts")
 
     def getUserNames(self):
         accounts = self.getUsersTable()
@@ -181,10 +178,10 @@ class LogIn:
         else:
             return accountID
 
-    def validatePassword(self, accountID, password):
+    def validatePassword(self, accountID, passwordInput):
         accounts = self.getUsersTable()
 
-        if accounts[accountID - 1][2] == password:
+        if accounts[accountID - 1][2] == passwordInput:
             return True
         else:
             return False

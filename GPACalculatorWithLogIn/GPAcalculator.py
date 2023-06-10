@@ -27,7 +27,7 @@ class GPACalculator:
                 grades.append(3)
             elif elements[3] >= 70:
                 grades.append(2)
-            creditHours.append(elements[3])
+            creditHours.append(elements[4])
 
         i = 0
         totalGPACredit = 0
